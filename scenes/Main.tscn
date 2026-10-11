@@ -1,21 +1,32 @@
-[gd_scene load_steps=2 format=3 uid="uid://c5yxt6hj2o3je"]
+[gd_scene load_steps=3 format=3 uid="uid://c5yxt6hj2o3je"]
 
-[ext_resource type="Script" path="res://scripts/World.gd" id="1_abcde"]
-[ext_resource type="Script" path="res://scripts/Player.gd" id="2_fghij"]
+[ext_resource type="Script" path="res://scripts/World.gd" id="1_world"]
+[ext_resource type="Script" path="res://scripts/Player.gd" id="2_player"]
 
 [node name="Main" type="Node3D"]
 
-[node name="World" type="Node3D" parent="."]
-script = SubResource("1_abcde")
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_1")
 
-[node name="Player" type="CharacterBody3D" parent="."]
-position = Vector3(0, 5, 0)
-script = SubResource("2_fghij")
-
-[node name="Head" type="Node3D" parent="Player"]
-
-[node name="Camera3D" type="Camera3D" parent="Player/Head"]
+[sub_resource type="Environment" id="Environment_1"]
+background_mode = 1
+background_color = Color(0.5, 0.7, 1.0, 1.0)
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
-position = Vector3(10, 10, 10)
+position = Vector3(10, 12, 10)
 rotation = Vector3(-0.785398, 0.785398, 0)
+light_energy_multiplier = 2.0
+
+[node name="World" type="Node3D" parent="."]
+script = ExtResource("1_world")
+
+[node name="Player" type="CharacterBody3D" parent="."]
+position = Vector3(0, 8, 0)
+script = ExtResource("2_player")
+
+[node name="Head" type="Node3D" parent="Player"]
+position = Vector3(0, 1.6, 0)
+
+[node name="Camera3D" type="Camera3D" parent="Player/Head"]
+current = true
+fov = 75.0

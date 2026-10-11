@@ -22,7 +22,7 @@ const FACE_DEFS := [
 
 var blocks: Dictionary = {}
 var mesh_instance: MeshInstance3D
-var world_radius: int = 12
+var world_radius: int = 16
 
 func _ready() -> void:
 	generate_world()
@@ -32,31 +32,33 @@ func generate_world() -> void:
 
 	for x in range(-world_radius, world_radius + 1):
 		for z in range(-world_radius, world_radius + 1):
-			var height: int = int(round(sin(x * 0.8) * 1.8 + cos(z * 0.75) * 2.0 + 4.0))
+			var height: int = int(round(sin(x * 0.8) * 1.8 + cos(z * 0.75) * 2.0 + 5.0))
 			if height < 1:
 				height = 1
 
-			for y in range(-1, height + 1):
+			for y in range(-2, height + 1):
 				var type: String = "stone"
 				if y == height:
 					type = "grass"
 				elif y >= height - 2:
 					type = "dirt"
+				elif y < 0:
+					type = "stone"
 				blocks[Vector3i(x, y, z)] = type
 
-			if (x + z) % 9 == 0 and abs(x) > 2 and abs(z) > 2:
+			if (x + z) % 11 == 0 and abs(x) > 3 and abs(z) > 3:
 				place_tree(Vector3i(x, height + 1, z))
 
 	rebuild_mesh()
 
 func place_tree(base: Vector3i) -> void:
-	for y in range(0, 4):
+	for y in range(0, 5):
 		blocks[Vector3i(base.x, base.y + y, base.z)] = "wood"
 
-	for dx in range(-2, 3):
-		for dy in range(2, 5):
-			for dz in range(-2, 3):
-				if abs(dx) + abs(dz) >= 4 and dy < 4:
+	for dx in range(-3, 4):
+		for dy in range(2, 6):
+			for dz in range(-3, 4):
+				if abs(dx) + abs(dz) >= 5 and dy < 5:
 					continue
 				blocks[Vector3i(base.x + dx, base.y + dy, base.z + dz)] = "leaf"
 
@@ -87,12 +89,12 @@ func rebuild_mesh() -> void:
 
 			surface_tool.set_color(color)
 			
-			# Erste Seite des Quads
+			# Triangle 1
 			surface_tool.add_vertex(local_vertices[0])
 			surface_tool.add_vertex(local_vertices[1])
 			surface_tool.add_vertex(local_vertices[2])
 			
-			# Zweite Seite des Quads
+			# Triangle 2
 			surface_tool.add_vertex(local_vertices[0])
 			surface_tool.add_vertex(local_vertices[2])
 			surface_tool.add_vertex(local_vertices[3])
@@ -103,10 +105,11 @@ func rebuild_mesh() -> void:
 	var mesh: Mesh = surface_tool.commit()
 	mesh_instance.mesh = mesh
 	
-	# Material mit Vertexfarben und besserer Beleuchtung
+	# Material mit Vertexfarben
 	var material := StandardMaterial3D.new()
 	material.vertex_color_use_as_albedo = true
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.disable_receive_shadows = false
 	mesh_instance.set_surface_override_material(0, material)
 
 func set_block(cell: Vector3i, type: String) -> void:
