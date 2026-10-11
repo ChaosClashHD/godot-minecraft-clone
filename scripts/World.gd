@@ -22,7 +22,7 @@ const FACE_DEFS := [
 
 var blocks: Dictionary = {}
 var mesh_instance: MeshInstance3D
-var world_radius := 12
+var world_radius: int = 12
 
 func _ready() -> void:
 	generate_world()
@@ -32,12 +32,12 @@ func generate_world() -> void:
 
 	for x in range(-world_radius, world_radius + 1):
 		for z in range(-world_radius, world_radius + 1):
-			var height := int(round(sin(x * 0.8) * 1.8 + cos(z * 0.75) * 2.0 + 4.0))
+			var height: int = int(round(sin(x * 0.8) * 1.8 + cos(z * 0.75) * 2.0 + 4.0))
 			if height < 1:
 				height = 1
 
 			for y in range(-1, height + 1):
-				var type := "stone"
+				var type: String = "stone"
 				if y == height:
 					type = "grass"
 				elif y >= height - 2:
@@ -72,46 +72,42 @@ func rebuild_mesh() -> void:
 		var type: String = String(blocks[block_pos])
 		var color: Color = BLOCK_COLORS.get(type, Color.WHITE)
 
-		for face in FACE_DEFS:
-			var neighbor_pos: Vector3i = block_pos + Vector3i(face["normal"])
+		for face_idx: int in range(FACE_DEFS.size()):
+			var face: Dictionary = FACE_DEFS[face_idx]
+			var face_normal: Vector3 = face["normal"]
+			var neighbor_pos: Vector3i = block_pos + Vector3i(face_normal)
+			
 			if blocks.has(neighbor_pos):
 				continue
 
+			var verts: Array = face["verts"]
 			var local_vertices: Array[Vector3] = []
-			for vertex in face["verts"]:
+			for vertex in verts:
 				local_vertices.append(vertex + Vector3(block_pos))
 
-			for i in range(0, 4):
-				var idx_a: int = i
-				var idx_b: int = (i + 1) % 4
-				var idx_c: int = (i + 2) % 4
-
-				var v0: Vector3 = local_vertices[idx_a]
-				var v1: Vector3 = local_vertices[idx_b]
-				var v2: Vector3 = local_vertices[idx_c]
-
-				surface_tool.set_color(color)
-				surface_tool.add_vertex(v0)
-				surface_tool.add_vertex(v1)
-				surface_tool.add_vertex(v2)
-
-			for i in range(0, 4):
-				var idx_a: int = i
-				var idx_b: int = (i + 2) % 4
-				var idx_c: int = (i + 3) % 4
-
-				var v0: Vector3 = local_vertices[idx_a]
-				var v1: Vector3 = local_vertices[idx_b]
-				var v2: Vector3 = local_vertices[idx_c]
-
-				surface_tool.set_color(color)
-				surface_tool.add_vertex(v0)
-				surface_tool.add_vertex(v1)
-				surface_tool.add_vertex(v2)
+			surface_tool.set_color(color)
+			
+			# Erste Seite des Quads
+			surface_tool.add_vertex(local_vertices[0])
+			surface_tool.add_vertex(local_vertices[1])
+			surface_tool.add_vertex(local_vertices[2])
+			
+			# Zweite Seite des Quads
+			surface_tool.add_vertex(local_vertices[0])
+			surface_tool.add_vertex(local_vertices[2])
+			surface_tool.add_vertex(local_vertices[3])
 
 	surface_tool.generate_normals()
 	surface_tool.index()
-	mesh_instance.mesh = surface_tool.commit()
+	
+	var mesh: Mesh = surface_tool.commit()
+	mesh_instance.mesh = mesh
+	
+	# Material mit Vertexfarben und besserer Beleuchtung
+	var material := StandardMaterial3D.new()
+	material.vertex_color_use_as_albedo = true
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mesh_instance.set_surface_override_material(0, material)
 
 func set_block(cell: Vector3i, type: String) -> void:
 	blocks[cell] = type
