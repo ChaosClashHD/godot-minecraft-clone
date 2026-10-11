@@ -1,173 +1,158 @@
-extends CharacterBody3D
+extends Node3D
+class_name VoxelWorld
 
-@export var walk_speed := 5.5
-@export var sprint_speed := 8.0
-@export var jump_velocity := 7.5
-@export var gravity := 22.0
-@export var mouse_sensitivity := 0.0025
+const BLOCK_COLORS := {
+	"grass": Color(0.36, 0.75, 0.26),
+	"dirt": Color(0.54, 0.33, 0.20),
+	"stone": Color(0.55, 0.55, 0.60),
+	"sand": Color(0.86, 0.81, 0.53),
+	"wood": Color(0.62, 0.42, 0.24),
+	"leaf": Color(0.28, 0.63, 0.28),
+	"glass": Color(0.70, 0.90, 1.00, 0.60),
+}
 
-var world: Node3D
-var target_block: Vector3i
-var target_normal: Vector3i = Vector3i.ZERO
-var head: Node3D
-var camera: Camera3D
-var grounded := false
+const FACE_DEFS := [
+	{"normal": Vector3(0, 1, 0), "verts": [Vector3(-0.5, 0.5, -0.5), Vector3(0.5, 0.5, -0.5), Vector3(0.5, 0.5, 0.5), Vector3(-0.5, 0.5, 0.5)]},
+	{"normal": Vector3(0, -1, 0), "verts": [Vector3(-0.5, -0.5, 0.5), Vector3(0.5, -0.5, 0.5), Vector3(0.5, -0.5, -0.5), Vector3(-0.5, -0.5, -0.5)]},
+	{"normal": Vector3(1, 0, 0), "verts": [Vector3(0.5, -0.5, -0.5), Vector3(0.5, -0.5, 0.5), Vector3(0.5, 0.5, 0.5), Vector3(0.5, 0.5, -0.5)]},
+	{"normal": Vector3(-1, 0, 0), "verts": [Vector3(-0.5, -0.5, 0.5), Vector3(-0.5, -0.5, -0.5), Vector3(-0.5, 0.5, -0.5), Vector3(-0.5, 0.5, 0.5)]},
+	{"normal": Vector3(0, 0, 1), "verts": [Vector3(-0.5, -0.5, 0.5), Vector3(0.5, -0.5, 0.5), Vector3(0.5, 0.5, 0.5), Vector3(-0.5, 0.5, 0.5)]},
+	{"normal": Vector3(0, 0, -1), "verts": [Vector3(0.5, -0.5, -0.5), Vector3(-0.5, -0.5, -0.5), Vector3(-0.5, 0.5, -0.5), Vector3(0.5, 0.5, -0.5)]},
+]
+
+var blocks: Dictionary = {}
+var mesh_instance: MeshInstance3D
+var world_radius := 12
 
 func _ready() -> void:
-    call_deferred("_bind_world")
-    _setup_input()
-    head = $Head
-    camera = $Head/Camera3D
-    Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-    rotation.y = 0
-    head.rotation.x = 0
+	generate_world()
 
-func _bind_world() -> void:
-    world = get_parent().get_node("World")
+func generate_world() -> void:
+	blocks.clear()
 
-func _setup_input() -> void:
-    var actions := [
-        "move_forward", "move_back", "move_left", "move_right", "jump", "sprint",
-        "break_block", "place_block"
-    ]
+	for x in range(-world_radius, world_radius + 1):
+		for z in range(-world_radius, world_radius + 1):
+			var height := int(round(sin(x * 0.8) * 1.8 + cos(z * 0.75) * 2.0 + 4.0))
+			if height < 1:
+				height = 1
 
-    for action in actions:
-        if not InputMap.has_action(action):
-            InputMap.add_action(action)
+			for y in range(-1, height + 1):
+				var type := "stone"
+				if y == height:
+					type = "grass"
+				elif y >= height - 2:
+					type = "dirt"
+				blocks[Vector3i(x, y, z)] = type
 
-    var key_map := {
-        "move_forward": [KEY_W, KEY_UP],
-        "move_back": [KEY_S, KEY_DOWN],
-        "move_left": [KEY_A, KEY_LEFT],
-        "move_right": [KEY_D, KEY_RIGHT],
-        "jump": [KEY_SPACE],
-        "sprint": [KEY_SHIFT],
-        "break_block": [MOUSE_BUTTON_LEFT],
-        "place_block": [MOUSE_BUTTON_RIGHT],
-    }
+			if (x + z) % 9 == 0 and abs(x) > 2 and abs(z) > 2:
+				place_tree(Vector3i(x, height + 1, z))
 
-    for action in key_map.keys():
-        for key in key_map[action]:
-            if key is String:
-                continue
-            var event := InputEventKey.new()
-            event.physical_keycode = key
-            InputMap.action_add_event(action, event)
+	rebuild_mesh()
 
-    var left_click := InputEventMouseButton.new()
-    left_click.button_index = MOUSE_BUTTON_LEFT
-    left_click.pressed = true
-    InputMap.action_add_event("break_block", left_click)
+func place_tree(base: Vector3i) -> void:
+	for y in range(0, 4):
+		blocks[Vector3i(base.x, base.y + y, base.z)] = "wood"
 
-    var right_click := InputEventMouseButton.new()
-    right_click.button_index = MOUSE_BUTTON_RIGHT
-    right_click.pressed = true
-    InputMap.action_add_event("place_block", right_click)
+	for dx in range(-2, 3):
+		for dy in range(2, 5):
+			for dz in range(-2, 3):
+				if abs(dx) + abs(dz) >= 4 and dy < 4:
+					continue
+				blocks[Vector3i(base.x + dx, base.y + dy, base.z + dz)] = "leaf"
 
-func _input(event: InputEvent) -> void:
-    if event is InputEventMouseMotion and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
-        rotation.y -= event.relative.x * mouse_sensitivity
-        head.rotation.x -= event.relative.y * mouse_sensitivity
-        head.rotation.x = clamp(head.rotation.x, -1.55, 1.55)
+func rebuild_mesh() -> void:
+	if mesh_instance == null:
+		mesh_instance = MeshInstance3D.new()
+		add_child(mesh_instance)
 
-    if event is InputEventKey and event.keycode == KEY_ESCAPE and event.pressed:
-        Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+	var surface_tool := SurfaceTool.new()
+	surface_tool.begin(Mesh.PRIMITIVE_TRIANGLES)
 
-    if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-        _break_target_block()
-    elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
-        _place_target_block()
+	for block_pos: Vector3i in blocks.keys():
+		var type: String = String(blocks[block_pos])
+		var color: Color = BLOCK_COLORS.get(type, Color.WHITE)
 
-func _physics_process(delta: float) -> void:
-    if world == null:
-        return
+		for face in FACE_DEFS:
+			var neighbor_pos: Vector3i = block_pos + Vector3i(face["normal"])
+			if blocks.has(neighbor_pos):
+				continue
 
-    var input_vector := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
-    var move_direction := (transform.basis * Vector3(input_vector.x, 0, input_vector.y)).normalized()
+			var local_vertices: Array[Vector3] = []
+			for vertex in face["verts"]:
+				local_vertices.append(vertex + Vector3(block_pos))
 
-    var desired_speed := walk_speed
-    if Input.is_action_pressed("sprint"):
-        desired_speed = sprint_speed
+			for i in range(0, 4):
+				var idx_a: int = i
+				var idx_b: int = (i + 1) % 4
+				var idx_c: int = (i + 2) % 4
 
-    velocity.x = move_direction.x * desired_speed
-    velocity.z = move_direction.z * desired_speed
+				var v0: Vector3 = local_vertices[idx_a]
+				var v1: Vector3 = local_vertices[idx_b]
+				var v2: Vector3 = local_vertices[idx_c]
 
-    if grounded and Input.is_action_just_pressed("jump"):
-        velocity.y = jump_velocity
-        grounded = false
-    else:
-        velocity.y -= gravity * delta
+				surface_tool.set_color(color)
+				surface_tool.add_vertex(v0)
+				surface_tool.add_vertex(v1)
+				surface_tool.add_vertex(v2)
 
-    var current_position := global_position
-    var surface_y := float(world.get_surface_height(global_position.x, global_position.z)) + 1.7
-    if global_position.y < surface_y and velocity.y <= 0.0:
-        global_position.y = surface_y
-        velocity.y = 0.0
-        grounded = true
-    else:
-        grounded = false
+			for i in range(0, 4):
+				var idx_a: int = i
+				var idx_b: int = (i + 2) % 4
+				var idx_c: int = (i + 3) % 4
 
-    move_and_slide()
+				var v0: Vector3 = local_vertices[idx_a]
+				var v1: Vector3 = local_vertices[idx_b]
+				var v2: Vector3 = local_vertices[idx_c]
 
-    # Keep the player on the terrain as a simple vertical clamp
-    var terrain_height := world.get_surface_height(global_position.x, global_position.z)
-    if global_position.y < terrain_height + 1.7:
-        global_position.y = terrain_height + 1.7
-        velocity.y = 0.0
-        grounded = true
+				surface_tool.set_color(color)
+				surface_tool.add_vertex(v0)
+				surface_tool.add_vertex(v1)
+				surface_tool.add_vertex(v2)
 
-    _update_target_block()
+	surface_tool.generate_normals()
+	surface_tool.index()
+	mesh_instance.mesh = surface_tool.commit()
 
-func _update_target_block() -> void:
-    if world == null:
-        return
+func set_block(cell: Vector3i, type: String) -> void:
+	blocks[cell] = type
+	rebuild_mesh()
 
-    var origin := camera.global_position
-    var forward := -camera.global_transform.basis.z.normalized()
-    var target := origin + forward * 7.0
-    var hit := world.raycast(origin, target, 7.0)
-    if hit.is_empty():
-        target_block = Vector3i.ZERO
-        target_normal = Vector3i.ZERO
-        return
+func remove_block(cell: Vector3i) -> void:
+	if blocks.has(cell):
+		blocks.erase(cell)
+		rebuild_mesh()
 
-    target_block = hit["cell"]
-    target_normal = hit["normal"]
+func raycast(origin: Vector3, target: Vector3, max_distance: float = 7.0) -> Dictionary:
+	var direction: Vector3 = (target - origin).normalized()
+	var distance: float = 0.0
+	var previous_cell: Vector3i = Vector3i.ZERO
 
-func _break_target_block() -> void:
-    if world == null:
-        return
+	while distance <= max_distance:
+		var current_point: Vector3 = origin + direction * distance
+		var cell: Vector3i = Vector3i(floor(current_point.x), floor(current_point.y), floor(current_point.z))
 
-    var origin := camera.global_position
-    var forward := -camera.global_transform.basis.z.normalized()
-    var hit := world.raycast(origin, origin + forward * 7.0, 7.0)
-    if hit.is_empty():
-        return
+		if cell != previous_cell and blocks.has(cell):
+			return {
+				"cell": cell,
+				"normal": previous_cell - cell,
+				"point": current_point,
+			}
 
-    var cell := hit["cell"] as Vector3i
-    world.remove_block(cell)
+		previous_cell = cell
+		distance += 0.05
 
-func _place_target_block() -> void:
-    if world == null:
-        return
+	return {}
 
-    var origin := camera.global_position
-    var forward := -camera.global_transform.basis.z.normalized()
-    var hit := world.raycast(origin, origin + forward * 7.0, 7.0)
-    if hit.is_empty():
-        return
+func get_surface_height(x: float, z: float) -> float:
+	var px: int = int(floor(x))
+	var pz: int = int(floor(z))
+	var highest: float = -999.0
 
-    var cell := hit["cell"] as Vector3i
-    var normal := hit["normal"] as Vector3i
-    var place_cell := cell + normal
+	for block_pos: Vector3i in blocks.keys():
+		if block_pos.x == px and block_pos.z == pz and block_pos.y > highest:
+			highest = float(block_pos.y)
 
-    if place_cell.distance_to(global_position) < 1.3:
-        return
+	return highest
 
-    world.set_block(place_cell, "dirt")
-
-func _unhandled_input(event: InputEvent) -> void:
-    if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-        _break_target_block()
-    elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
-        _place_target_block()
+func is_block_at(cell: Vector3i) -> bool:
+	return blocks.has(cell)
