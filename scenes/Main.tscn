@@ -1,16 +1,16 @@
-[gd_scene load_steps=3 format=3 uid="uid://c5yxt6hj2o3je"]
+[gd_scene load_steps=4 format=3 uid="uid://c5yxt6hj2o3je"]
 
 [ext_resource type="Script" path="res://scripts/World.gd" id="1_world"]
 [ext_resource type="Script" path="res://scripts/Player.gd" id="2_player"]
 
+[sub_resource type="Environment" id="env_1"]
+background_mode = 1
+background_color = Color(0.5, 0.7, 1.0, 1.0)
+
 [node name="Main" type="Node3D"]
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
-environment = SubResource("Environment_1")
-
-[sub_resource type="Environment" id="Environment_1"]
-background_mode = 1
-background_color = Color(0.5, 0.7, 1.0, 1.0)
+environment = SubResource("env_1")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
 position = Vector3(10, 12, 10)
